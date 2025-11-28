@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>x1min_lab | Portal</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* --- Base Settings --- */
+        body {
+            margin: 0;
+            background-color: #02040a;
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            color: white;
+            /* スクロールは許可するが、背景は固定 */
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 背景キャンバス（固定） */
+        #canvas-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0; /* 最背面 */
+            background: radial-gradient(circle at center, #0f1c30 0%, #02040a 100%);
+            pointer-events: none; /* UI操作を邪魔しないようにするが、JSでイベントは取る */
+        }
+
+        /* --- UI Layout (Bento Grid) --- */
+        #ui-layer {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            box-sizing: border-box;
+            display: grid;
+            grid-template-columns: 300px 1fr; /* PC: 左300px, 右残り */
+            gap: 24px;
+            min-height: 100vh;
+            align-content: center; /* 垂直方向中央寄せ */
+        }
+
+        /* --- Left Side: Profile Area --- */
+        .profile-card {
+            background: rgba(10, 20, 35, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px 30px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: fit-content;
+            position: sticky;
+            top: 40px; /* スクロール時に追従 */
+        }
+
+        .profile-img {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(14, 165, 233, 0.5);
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(14, 165, 233, 0.2);
+            background-color: #000;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin: 0 0 5px 0;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+
+        .role {
+            color: #38bdf8;
+            font-size: 0.9rem;
+            margin-bottom: 20px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .bio {
+            font-size: 0.85rem;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 0;
+            text-align: left;
+            width: 100%;
+        }
+
+        /* --- Right Side: Links Grid --- */
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* 自動折り返し */
+            gap: 16px;
+        }
+
+        /* Link Card Design */
+        .link-card {
+            display: flex;
+            align-items: center;
+            padding: 24px;
+            background: rgba(255, 255, 255, 0.03); /* かなり透明 */
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Hover Effects */
+        .link-card:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(14, 165, 233, 0.4);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .icon-box {
+            width: 56px;
+            height: 56px;
+            background: rgba(14, 165, 233, 0.1);
+            border-radius: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.8rem;
+            margin-right: 20px;
+            color: #38bdf8;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+        
+        .link-card:hover .icon-box {
+            background: rgba(14, 165, 233, 0.2);
+            color: #fff;
+            transform: scale(1.1);
+        }
+
+        .text-content {
+            flex-grow: 1;
+        }
+
+        .card-title {
+            display: block;
+            font-size: 1.1rem;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .card-desc {
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .arrow-icon {
+            font-size: 0.9rem;
+            color: #555;
+            transition: transform 0.3s;
+        }
+
+        .link-card:hover .arrow-icon {
+            color: #38bdf8;
+            transform: translateX(4px);
+        }
+
+        /* 特殊カード: 横長（Featured） */
+        .card-wide {
+            grid-column: 1 / -1; /* 全幅使う */
+            background: linear-gradient(90deg, rgba(14, 165, 233, 0.1) 0%, rgba(255,255,255,0.02) 100%);
+            border: 1px solid rgba(14, 165, 233, 0.2);
+        }
+
+        /* --- Mobile Responsive --- */
+        @media (max-width: 850px) {
+            #ui-layer {
+                grid-template-columns: 1fr; /* 1カラムに変更 */
+                gap: 30px;
+                padding-top: 60px;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .profile-card {
+                position: relative; /* 固定解除 */
+                top: 0;
+            }
+
+            .links-grid {
+                grid-template-columns: 1fr; /* スマホは1列 */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        
+        <aside class="profile-card">
+            <img src="./image/profile.jpg" alt="x1min_lab" class="profile-img">
+            
+            <h1>x1min_lab</h1>
+            <div class="role">Data Analyst / Educator / Aquaponics Designer</div>
+            
+            <p class="bio">
+                「1分で得られる知見」を研究中。<br>
+                アナリスト×教育開発10年。<br>
+                アクアポニックスとデータ分析の実験室。
+            </p>
+        </aside>
+
+        <div class="links-grid">
+
+            <a href="https://note.com/x1min_lab" target="_blank" class="link-card card-wide">
+                <div class="icon-box"><i class="fas fa-book-open"></i></div>
+                <div class="text-content">
+                    <span class="card-title">Note (Official Lab)</span>
+                    <span class="card-desc">実験レポート、コード解説、詳細な分析記事はこちら</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+            <a href="https://x.com/x1min_Lab" target="_blank" class="link-card">
+                <div class="icon-box"><i class="fa-brands fa-x-twitter"></i></div>
+                <div class="text-content">
+                    <span class="card-title">X / Twitter</span>
+                    <span class="card-desc">日々の実験速報・要約</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+            <a href="https://www.threads.net/@x1min_lab?xmt=AQF0012DDEdIUEIm_QdcBmjzxTbJ0Iqskvxo7F7g44o1czA" target="_blank" class="link-card">
+                <div class="icon-box"><i class="fa-brands fa-threads"></i></div>
+                <div class="text-content">
+                    <span class="card-title">Threads</span>
+                    <span class="card-desc">思考プロセス・裏側</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+            <a href="https://github.com/x1-m" target="_blank" class="link-card">
+                <div class="icon-box"><i class="fab fa-github"></i></div>
+                <div class="text-content">
+                    <span class="card-title">GitHub</span>
+                    <span class="card-desc">Source Code / Data</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+            <a href="https://www.instagram.com/x1min_lab/" target="_blank" class="link-card">
+                <div class="icon-box"><i class="fa-brands fa-instagram"></i></div>
+                <div class="text-content">
+                    <span class="card-title">Instagram</span>
+                    <span class="card-desc">Visual Archive</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+            <a href="#" target="_blank" class="link-card">
+                <div class="icon-box"><i class="fas fa-microphone-lines"></i></div>
+                <div class="text-content">
+                    <span class="card-title">Podcast</span>
+                    <span class="card-desc">深夜のデータ実験室（準備中）</span>
+                </div>
+                <i class="fas fa-arrow-right arrow-icon"></i>
+            </a>
+
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            text: "x1min\nlab",
+            textParticleColor: 0x0ea5e9, 
+            bgParticleColor: 0xffffff,   
+            particleSize: 0.14,          // 少し控えめに
+            mouseRadius: 5.0, 
+            mouseForce: 2.0,   
+            baseReturnSpeed: 0.03,
+            waveSpeed: 1.0,
+            waveAmpText: 0.2,   
+            waveAmpBg: 1.2      
+        };
+
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x02040a, 0.003);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // レイアウトに合わせてカメラ位置を調整
+        // 左側にUIが来るため、パーティクル文字を少し右にずらす、あるいは全体を引く
+        function updateCamera() {
+            if (window.innerWidth < 850) {
+                // Mobile
+                camera.position.z = 35;
+                camera.position.x = 0;
+            } else {
+                // Desktop
+                camera.position.z = 25; 
+                // グリッドレイアウトで左が埋まるので、少し右(x+)に見えるように調整してもよいが
+                // 真ん中で背景として動いている方が美しいので0のままにする
+                camera.position.x = 0; 
+            }
+        }
+        updateCamera();
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // --- Text Generation ---
+        function createTextParticles(text) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const size = 512;
+            canvas.width = size;
+            canvas.height = size;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 100px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const lines = text.split('\n');
+            const lineHeight = 110;
+            const startY = (size - (lines.length - 1) * lineHeight) / 2;
+            lines.forEach((line, i) => {
+                ctx.fillText(line, size / 2, startY + i * lineHeight);
+            });
+            const imageData = ctx.getImageData(0, 0, size, size);
+            const data = imageData.data;
+            const positions = [];
+            const step = 4; // 少し間引いて軽くする
+            for (let y = 0; y < size; y += step) {
+                for (let x = 0; x < size; x += step) {
+                    const i = (y * size + x) * 4;
+                    if (data[i] > 128) {
+                        const pX = (x - size / 2) * 0.08;
+                        const pY = -(y - size / 2) * 0.08;
+                        positions.push({ x: pX, y: pY, z: 0 });
+                    }
+                }
+            }
+            return positions;
+        }
+
+        const particlePositions = createTextParticles(CONFIG.text);
+        const particlesCount = particlePositions.length;
+        const bgParticlesCount = 600;
+        const totalParticles = particlesCount + bgParticlesCount;
+
+        const geometry = new THREE.BufferGeometry();
+        const posArray = new Float32Array(totalParticles * 3);
+        const colorArray = new Float32Array(totalParticles * 3);
+        const originalPos = [];
+
+        const colorText = new THREE.Color(CONFIG.textParticleColor);
+        const colorBg = new THREE.Color(CONFIG.bgParticleColor);
+
+        for(let i = 0; i < particlesCount; i++) {
+            const p = particlePositions[i];
+            posArray[i*3] = p.x;
+            posArray[i*3+1] = p.y;
+            posArray[i*3+2] = p.z;
+            colorArray[i*3] = colorText.r;
+            colorArray[i*3+1] = colorText.g;
+            colorArray[i*3+2] = colorText.b;
+            originalPos.push({ x: p.x, y: p.y, z: p.z, isText: true });
+        }
+
+        for(let i = particlesCount; i < totalParticles; i++) {
+            const x = (Math.random() - 0.5) * 80;
+            const y = (Math.random() - 0.5) * 80;
+            const z = (Math.random() - 0.5) * 60 - 10;
+            posArray[i*3] = x;
+            posArray[i*3+1] = y;
+            posArray[i*3+2] = z;
+            colorArray[i*3] = colorBg.r;
+            colorArray[i*3+1] = colorBg.g;
+            colorArray[i*3+2] = colorBg.b;
+            originalPos.push({ x: x, y: y, z: z, isText: false });
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+
+        const material = new THREE.PointsMaterial({
+            size: CONFIG.particleSize,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending
+        });
+
+        const particlesMesh = new THREE.Points(geometry, material);
+        scene.add(particlesMesh);
+
+        // --- Interaction ---
+        const mouse = new THREE.Vector2(-1000, -1000);
+        let lastInteractionTime = 0;
+
+        // グローバルイベントでマウス位置を取得（UIの上でも反応させるため）
+        function handleInput(x, y) {
+            mouse.x = (x / window.innerWidth) * 2 - 1;
+            mouse.y = -(y / window.innerHeight) * 2 + 1;
+            lastInteractionTime = Date.now();
+        }
+
+        document.addEventListener('mousemove', (e) => handleInput(e.clientX, e.clientY));
+        document.addEventListener('touchmove', (e) => {
+            if(e.touches.length > 0) handleInput(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: false });
+
+        // --- Animate ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            const positions = particlesMesh.geometry.attributes.position.array;
+            
+            // カメラ位置に応じたマウス影響範囲
+            const mouseX = mouse.x * (camera.position.z * 1.2); 
+            const mouseY = mouse.y * (camera.position.z * 0.7);
+
+            // 1.5秒操作がなければ復元モードへ
+            const isRestoring = (Date.now() - lastInteractionTime) > 1500;
+            const currentSpeed = isRestoring ? 0.1 : 0.03;
+
+            for(let i = 0; i < totalParticles; i++) {
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+
+                const origin = originalPos[i];
+                let px = positions[ix];
+                let py = positions[iy];
+                let pz = positions[iz];
+
+                // Wave Movement
+                let waveX, waveY, waveZ;
+                if (origin.isText) {
+                    waveX = Math.sin(time * 0.5 + origin.y * 0.5) * CONFIG.waveAmpText * 0.3;
+                    waveY = Math.cos(time * 0.3 + origin.x * 0.5) * CONFIG.waveAmpText;
+                    waveZ = Math.sin(time * 0.4 + origin.x * 0.2) * CONFIG.waveAmpText; 
+                } else {
+                    waveX = Math.sin(time * 0.2 + origin.z * 0.1) * CONFIG.waveAmpBg;
+                    waveY = Math.cos(time * 0.15 + origin.x * 0.1) * CONFIG.waveAmpBg;
+                    waveZ = Math.sin(time * 0.1 + origin.y * 0.1) * CONFIG.waveAmpBg;
+                }
+
+                const targetX = origin.x + waveX;
+                const targetY = origin.y + waveY;
+                const targetZ = origin.z + waveZ;
+
+                // Mouse Force
+                let forceX = 0, forceY = 0;
+                const dx = px - mouseX;
+                const dy = py - mouseY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                if (dist < CONFIG.mouseRadius) {
+                    const force = (CONFIG.mouseRadius - dist) / CONFIG.mouseRadius;
+                    const angle = Math.atan2(dy, dx);
+                    forceX = Math.cos(angle) * force * CONFIG.mouseForce;
+                    forceY = Math.sin(angle) * force * CONFIG.mouseForce;
+                }
+
+                // Apply
+                positions[ix] += (targetX - px + forceX) * currentSpeed;
+                positions[iy] += (targetY - py + forceY) * currentSpeed;
+                positions[iz] += (targetZ - pz) * currentSpeed;
+            }
+
+            particlesMesh.geometry.attributes.position.needsUpdate = true;
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            updateCamera();
+        });
+    </script>
+</body>
+</html>
